@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Banana Cup</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg1:#3a3f78;--bg2:#12143a;--ink:#fff6cf;--soft:#b9bde6;--btn:rgba(255,255,255,.1);--btn-on:#f6c915;--btn-on-ink:#2b2200;color-scheme:dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){--bg1:#fff3c4;--bg2:#e6d9ff;--ink:#3a2a00;--soft:#6b5d8a;--btn:rgba(0,0,0,.07);color-scheme:light}}
+:root[data-theme="light"]{--bg1:#fff3c4;--bg2:#e6d9ff;--ink:#3a2a00;--soft:#6b5d8a;--btn:rgba(0,0,0,.07)}
+html,body{height:100%;margin:0}
+body{background:radial-gradient(ellipse at 50% 40%,var(--bg1),var(--bg2));color:var(--ink);font-family:"Bricolage Grotesque",system-ui,sans-serif;overflow:hidden;display:flex;flex-direction:column}
+header{padding:18px 22px 0;text-align:center}
+h1{margin:0;font-size:clamp(28px,5vw,44px);font-weight:800}
+header p{margin:6px 0 0;color:var(--soft);font-size:14px}
+#stage{flex:1;min-height:0;position:relative;touch-action:none;cursor:grab}
+#stage:active{cursor:grabbing}
+canvas{display:block;width:100%;height:100%}
+nav{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding:10px 14px 16px}
+button{font:inherit;font-size:15px;color:var(--ink);background:var(--btn);border:0;border-radius:999px;padding:10px 20px;cursor:pointer}
+button:hover{background:rgba(246,201,21,.25)}
+button[aria-pressed="true"]{background:var(--btn-on);color:var(--btn-on-ink);font-weight:700}
+button:focus-visible{outline:2px solid var(--btn-on);outline-offset:2px}
+#spin,#spin:hover{color:#fff;font-weight:800;letter-spacing:.04em;background:linear-gradient(90deg,#ff1744,#2979ff,#b026ff,#ff1744);background-size:300% 100%;animation:rgb 3s linear infinite;box-shadow:0 0 16px rgba(176,38,255,.55)}
+#spin:active{transform:scale(.95)}
+@keyframes rgb{to{background-position:300% 0}}
+@media (prefers-reduced-motion:reduce){#spin{animation:none}}
+</style>
+</head>
+<body>
+<header>
+<h1>Banana Cup</h1>
+<p>One finger rotates it in any direction. Two fingers tilt, twist and zoom.</p>
+</header>
+<div id="stage"></div>
+<nav>
+<button id="peel" aria-pressed="false">Open banana</button>
+<button id="auto" aria-pressed="true">Auto-rotate</button>
+<button id="spin" type="button">Spin</button>
+</nav>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+var stage=document.getElementById('stage');
+var renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+stage.appendChild(renderer.domElement);
+var scene=new THREE.Scene();
+var camera=new THREE.PerspectiveCamera(35,1,0.1,100);
+
+// ---- peel texture ----
+var W=1024,H=512,c=document.createElement('canvas');c.width=W;c.height=H;
+var g=c.getContext('2d');
+var gr=g.createLinearGradient(0,0,W,0);
+gr.addColorStop(0,'#5f5a22');gr.addColorStop(0.07,'#6f7a28');gr.addColorStop(0.15,'#c9c32a');
+gr.addColorStop(0.28,'#f3c80f');gr.addColorStop(0.6,'#f7cf12');gr.addColorStop(0.9,'#e9b80a');
+gr.addColorStop(0.96,'#8a6410');gr.addColorStop(1,'#2e1e0c');
+g.fillStyle=gr;g.fillRect(0,0,W,H);
+function rnd(a,b){return a+Math.random()*(b-a)}
+for(var i=0;i<60;i++){g.fillStyle='rgba('+(Math.random()<.5?'255,236,120':'190,140,10')+','+rnd(.04,.09)+')';
+ g.beginPath();g.ellipse(rnd(80,W-60),rnd(0,H),rnd(20,90),rnd(8,40),0,0,7);g.fill();}
+for(var k=0;k<5;k++){g.fillStyle='rgba(120,90,0,.28)';g.fillRect(0,k*H/5-1.5,W,3);}
+for(i=0;i<420;i++){var x=rnd(70,W-30),y=rnd(0,H),r=rnd(.8,3.2);
+ g.fillStyle='rgba(88,52,18,'+rnd(.35,.8)+')';g.beginPath();g.ellipse(x,y,r*1.6,r,0,0,7);g.fill();}
+for(i=0;i<5;i++){g.fillStyle='rgba(110,70,20,.22)';g.beginPath();g.ellipse(rnd(150,W-150),rnd(0,H),rnd(25,60),rnd(10,25),rnd(0,3),0,7);g.fill();}
+var tex=new THREE.CanvasTexture(c);tex.wrapT=THREE.RepeatWrapping;tex.anisotropy=8;
+
+// ---- fruit texture ----
+var c2=document.createElement('canvas');c2.width=512;c2.height=128;
+var g2=c2.getContext('2d');g2.fillStyle='#f6ece2';g2.fillRect(0,0,512,128);
+for(i=0;i<140;i++){g2.strokeStyle='rgba(200,165,140,'+rnd(.08,.25)+')';g2.lineWidth=rnd(.5,1.5);
+ var yy=rnd(0,128);g2.beginPath();g2.moveTo(0,yy);g2.lineTo(512,yy+rnd(-4,4));g2.stroke();}
+var ftex=new THREE.CanvasTexture(c2);ftex.wrapT=THREE.RepeatWrapping;
+
+// ---- geometry ----
+var T=180,S=50,R=1.7,A=.95,L=2*A*R,I0=90,off=[0,0,0];
+function base(t){return Math.pow(Math.sin(Math.PI*t),.4)*.32}
+function peelR(t){if(t<.1){var s=t/.1;s=s*s*(3-2*s);return .085+(base(.1)-.085)*s}return base(t)}
+function fruitR(t){var u=(t-.05)/.92;return u<=0||u>=1?0:.285*Math.pow(Math.sin(Math.PI*u),.45)}
+function grid(i0,i1,th0,th1,J,rf,ridge){
+ var P=[],U=[],I=[],C=[];
+ for(var i=i0;i<=i1;i++){var t=i/T,a=(t-.5)*2*A,cx=R*Math.sin(a),cy=-R*Math.cos(a),nx=Math.sin(a),ny=-Math.cos(a),rad=rf(t);
+  C.push(cx-off[0],cy-off[1],-off[2]);
+  for(var j=0;j<=J;j++){var th=th0+(th1-th0)*j/J,r=rad*(1+ridge*Math.cos(5*th));
+   P.push(cx+r*Math.cos(th)*nx-off[0],cy+r*Math.cos(th)*ny-off[1],r*Math.sin(th)*.95-off[2]);
+   U.push(t,th/(2*Math.PI));}}
+ for(i=0;i<i1-i0;i++)for(j=0;j<J;j++){var a0=i*(J+1)+j,b0=a0+1,c0=a0+J+1,d0=c0+1;I.push(a0,c0,b0,b0,c0,d0);}
+ return {P:P,U:U,I:I,C:C};
+}
+function mk(g){var geo=new THREE.BufferGeometry();
+ geo.setAttribute('position',new THREE.Float32BufferAttribute(g.P,3));
+ geo.setAttribute('uv',new THREE.Float32BufferAttribute(g.U,2));
+ geo.setIndex(g.I);geo.computeVertexNormals();return geo}
+function seam(geo,rows){var n=geo.attributes.normal;
+ for(var i=0;i<rows;i++){var p=i*(S+1),q=p+S,x=n.getX(p)+n.getX(q),y=n.getY(p)+n.getY(q),z=n.getZ(p)+n.getZ(q),l=Math.hypot(x,y,z)||1;
+  n.setXYZ(p,x/l,y/l,z/l);n.setXYZ(q,x/l,y/l,z/l);}}
+// centre everything on the closed banana
+var tmp=grid(0,T,0,2*Math.PI,S,peelR,.06),mn=[1e9,1e9,1e9],mx=[-1e9,-1e9,-1e9];
+for(i=0;i<tmp.P.length;i++){var q=i%3;mn[q]=Math.min(mn[q],tmp.P[i]);mx[q]=Math.max(mx[q],tmp.P[i])}
+off=[(mn[0]+mx[0])/2,(mn[1]+mx[1])/2,(mn[2]+mx[2])/2];
+
+var banana=new THREE.Group();scene.add(banana);
+var matFront=new THREE.MeshStandardMaterial({map:tex,roughness:.5,bumpMap:tex,bumpScale:1.2});
+var matStem=new THREE.MeshStandardMaterial({map:tex,roughness:.5,bumpMap:tex,bumpScale:1.2,side:THREE.DoubleSide});
+var matBack=new THREE.MeshStandardMaterial({color:0xc9ae62,roughness:.8,side:THREE.BackSide});
+var matFruit=new THREE.MeshStandardMaterial({map:ftex,roughness:.7});
+
+// stem (always attached)
+var gs=grid(0,I0,0,2*Math.PI,S,peelR,.06),cap=gs.P.length/3;
+gs.P.push(gs.C[0],gs.C[1],gs.C[2]);gs.U.push(0,.5);
+for(var j=0;j<S;j++)gs.I.push(cap,j,j+1);
+var stemGeo=mk(gs);seam(stemGeo,I0+1);banana.add(new THREE.Mesh(stemGeo,matStem));
+
+// fruit inside
+var gf=grid(9,176,0,2*Math.PI,S,fruitR,.03),fg=mk(gf);seam(fg,168);
+banana.add(new THREE.Mesh(fg,matFruit));
+
+// five peel strips hinged at the neck
+var a0=(I0/T-.5)*2*A,T0=[Math.cos(a0),Math.sin(a0),0],strips=[],Jn=10,nR=T-I0+1,Cc=null;
+for(var k=0;k<5;k++){
+ var th0=2*Math.PI*k/5,thc=2*Math.PI*(k+.5)/5,gp=grid(I0,T,th0,2*Math.PI*(k+1)/5,Jn,peelR,.06);
+ if(!Cc)Cc=gp.C;
+ var d=new Float32Array(gp.P.length);
+ for(var r=0;r<nR;r++)for(j=0;j<=Jn;j++)for(var q=0;q<3;q++){var id=(r*(Jn+1)+j)*3+q;d[id]=gp.P[id]-gp.C[r*3+q]}
+ var n0x=Math.sin(a0),n0y=-Math.cos(a0),ox=Math.cos(thc)*n0x,oy=Math.cos(thc)*n0y,oz=Math.sin(thc)*.95,ol=Math.hypot(ox,oy,oz);
+ ox/=ol;oy/=ol;oz/=ol;
+ var ax=[T0[1]*oz-T0[2]*oy,T0[2]*ox-T0[0]*oz,T0[0]*oy-T0[1]*ox],al=Math.hypot(ax[0],ax[1],ax[2]);
+ ax=[ax[0]/al,ax[1]/al,ax[2]/al];
+ var geo=mk(gp);
+ var m1=new THREE.Mesh(geo,matFront),m2=new THREE.Mesh(geo,matBack);m1.frustumCulled=m2.frustumCulled=false;
+ banana.add(m1);banana.add(m2);strips.push({geo:geo,d:d,ax:ax});
+}
+var cs=new Float32Array(nR),sn=new Float32Array(nR);
+function setPeel(p){
+ for(var r=0;r<nR;r++){var s=r/T*L,ph=p*2.3*(1-Math.exp(-s/.9));cs[r]=Math.cos(ph);sn[r]=Math.sin(ph)}
+ strips.forEach(function(st){
+  var pa=st.geo.attributes.position.array,kx=st.ax[0],ky=st.ax[1],kz=st.ax[2],cx=Cc[0],cy=Cc[1],cz=Cc[2];
+  for(var r=0;r<nR;r++){
+   var c=cs[r],s=sn[r];
+   for(var j=0;j<=Jn;j++){var id=(r*(Jn+1)+j)*3,vx=st.d[id],vy=st.d[id+1],vz=st.d[id+2],dt=kx*vx+ky*vy+kz*vz;
+    pa[id]=cx+vx*c+(ky*vz-kz*vy)*s+kx*dt*(1-c);
+    pa[id+1]=cy+vy*c+(kz*vx-kx*vz)*s+ky*dt*(1-c);
+    pa[id+2]=cz+vz*c+(kx*vy-ky*vx)*s+kz*dt*(1-c);}
+   if(r<nR-1){var ex=Cc[(r+1)*3]-Cc[r*3],ey=Cc[(r+1)*3+1]-Cc[r*3+1],ez=Cc[(r+1)*3+2]-Cc[r*3+2],e=kx*ex+ky*ey+kz*ez;
+    cx+=ex*c+(ky*ez-kz*ey)*s+kx*e*(1-c);cy+=ey*c+(kz*ex-kx*ez)*s+ky*e*(1-c);cz+=ez*c+(kx*ey-ky*ex)*s+kz*e*(1-c);}
+  }
+  st.geo.attributes.position.needsUpdate=true;st.geo.computeVertexNormals();
+ });
+}
+banana.quaternion.setFromEuler(new THREE.Euler(.35,-.5,.1));
+
+scene.add(new THREE.HemisphereLight(0xfff4d6,0x4a4a8a,.9));
+var d1=new THREE.DirectionalLight(0xffffff,1.1);d1.position.set(3,4,5);scene.add(d1);
+var d2=new THREE.DirectionalLight(0xaab4ff,.5);d2.position.set(-4,-2,-3);scene.add(d2);
+
+// ---- sizing ----
+var zoom=1,baseDist=8;
+function resize(){
+ var w=stage.clientWidth||300,h=stage.clientHeight||300;
+ renderer.setSize(w,h,false);camera.aspect=w/h;
+ baseDist=2.3*1.2/Math.tan(THREE.MathUtils.degToRad(17.5))/Math.min(1,camera.aspect);
+ camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(stage);resize();
+
+// ---- interaction ----
+var vx=0,vy=0,auto=true,pts={},pinch=0,pm={x:0,y:0},pa=0,drag=false,peel=0,peelTo=0;
+var autoBtn=document.getElementById('auto'),peelBtn=document.getElementById('peel');
+function setAuto(v){auto=v;autoBtn.setAttribute('aria-pressed',v)}
+var Y=new THREE.Vector3(0,1,0),X=new THREE.Vector3(1,0,0),qa=new THREE.Quaternion(),qb=new THREE.Quaternion();
+function rot(dx,dy){qa.setFromAxisAngle(Y,dx);qb.setFromAxisAngle(X,dy);banana.quaternion.premultiply(qb).premultiply(qa).normalize()}
+stage.addEventListener('pointerdown',function(e){stage.setPointerCapture(e.pointerId);pts[e.pointerId]={x:e.clientX,y:e.clientY};drag=true;setAuto(false);vx=vy=0;spinV=0});
+stage.addEventListener('pointermove',function(e){
+ var p=pts[e.pointerId];if(!p)return;
+ var keys=Object.keys(pts);
+ if(keys.length===2){
+  pts[e.pointerId]={x:e.clientX,y:e.clientY};
+  var a=pts[keys[0]],b=pts[keys[1]],dd=Math.hypot(a.x-b.x,a.y-b.y),mx=(a.x+b.x)/2,my=(a.y+b.y)/2,an=Math.atan2(b.y-a.y,b.x-a.x);
+  if(pinch){zoom=Math.min(3,Math.max(.4,zoom*dd/pinch));rot((mx-pm.x)*.009,(my-pm.y)*.009);
+   var da=an-pa;if(da>Math.PI)da-=2*Math.PI;if(da<-Math.PI)da+=2*Math.PI;
+   qa.setFromAxisAngle(new THREE.Vector3(0,0,1),-da);banana.quaternion.premultiply(qa).normalize();}
+  pinch=dd;pm={x:mx,y:my};pa=an;return;
+ }
+ var dx=(e.clientX-p.x)*.009,dy=(e.clientY-p.y)*.009;
+ pts[e.pointerId]={x:e.clientX,y:e.clientY};
+ rot(dx,dy);vx=dx;vy=dy;
+});
+function up(e){delete pts[e.pointerId];pinch=0;if(!Object.keys(pts).length)drag=false}
+stage.addEventListener('pointerup',up);stage.addEventListener('pointercancel',up);
+stage.addEventListener('wheel',function(e){e.preventDefault();zoom=Math.min(3,Math.max(.4,zoom*(e.deltaY>0?1.08:.92)))},{passive:false});
+autoBtn.addEventListener('click',function(){setAuto(!auto)});
+peelBtn.addEventListener('click',function(){
+ peelTo=peelTo?0:1;peelBtn.setAttribute('aria-pressed',!!peelTo);
+ peelBtn.textContent=peelTo?'Close banana':'Open banana';
+});
+var spinV=0;
+document.getElementById('spin').addEventListener('click',function(){spinV=Math.min(.6,spinV+.45);vx=vy=0});
+if(matchMedia('(prefers-reduced-motion: reduce)').matches)setAuto(false);
+function loop(){
+ requestAnimationFrame(loop);
+ if(peel!==peelTo){peel+=(peelTo-peel)*.07;if(Math.abs(peelTo-peel)<.002)peel=peelTo;setPeel(peel)}
+ if(!drag){
+  if(auto)rot(.006,0);
+  if(Math.abs(vx)+Math.abs(vy)>.0003){rot(vx,vy);vx*=.95;vy*=.95}
+ }
+ if(spinV>.0015){rot(spinV,0);spinV*=.985}else spinV=0;
+ camera.position.z+=(baseDist/zoom-camera.position.z)*.15;
+ renderer.render(scene,camera);
+}
+setPeel(0);camera.position.z=baseDist;loop();
+})();
+</script>
+</body>
+</html>
